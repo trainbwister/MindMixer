@@ -19,10 +19,6 @@ TB_LENGTH = 2.5
 # which N-back initially?
 N = 1
 
-# sometimes the random distribution of stimuli results in a very low interaction on your part.
-# in order to address this, do some ITERATIONS and take the maximum of all random distributions.
-ITERATIONS = 15
-
 # UPPER ThresHold, above which N is increased
 UPPERTH = 90
 
@@ -37,13 +33,13 @@ KEYRIGHT = "o"
 SPACE = " "
 IFS = ['1.png','2.png','3.png','4.png','5.png','6.png','7.png','8.png']
 SFS = ['1.ogg','2.ogg','3.ogg','4.ogg','5.ogg','6.ogg','7.ogg','8.ogg']
+BASE = 'base.png'
 
 ### END CONFIGURATION SECTION ###
 
-TRIALS = MINTRIALS + N
 TOPLEFT =((RESOLUTION[0]-SIZE[0])/2,(RESOLUTION[1]-SIZE[1])/2)
 
-import time, sys
+import time, sys, re
 from random import randint
 from pygame import display, image, key, Surface, mixer, event, mouse, font
 from pygame import FULLSCREEN, KEYDOWN
@@ -51,7 +47,7 @@ from pygame.transform import scale
 
 def selftests():
     die = None
-    for f in IFS+SFS:
+    for f in IFS+SFS+[BASE]:
         try:
             open(f,"rb")
         except IOError, e:
@@ -67,6 +63,7 @@ def selftests():
 class Trial:
     def __init__(self,imagefile,soundfile,trgtimg,trgtsnd):
         self.image = scale(image.load(imagefile), SIZE).convert()
+        self.fill = scale(image.load(BASE),SIZE).convert()
         self.sound = mixer.Sound(soundfile)
         self.trgtimg = trgtimg
         self.trgtsnd = trgtsnd
@@ -79,12 +76,14 @@ class Trial:
         display.flip()
         self.sound.play()
         time.sleep(ST_LENGTH)
-        surface.fill((255,255,255))
+        surface.blit(self.fill,TOPLEFT)
         display.flip()
         time.sleep(TB_LENGTH)
         keypresses = []
         for e in event.get(KEYDOWN):
             keypresses += [e.dict['unicode']]
+        if SPACE in keypresses:
+            return None
         if unicode(KEYLEFT) in keypresses:
             if self.trgtimg:
                 #print "user hit key \""+ KEYLEFT +"\" correctly"
@@ -99,38 +98,27 @@ class Trial:
             else:
                 #print "user hit key \""+ KEYRIGHT +"\" incorrectly"
                 self.result[1] = False
+        return True
 
-def nfroml(n,l):
-    if n > 0:
-        return [l[randint(0,len(l)-1)]]+nfroml(n-1,l)
-    else:
-        return []
-
-def nback(n,l):
-    if n >= len(l):
-        return 0
-    elif l[0] == l[n]:
-        return 1+nback(n,l[1:])
-    else:
-        return nback(n,l[1:])
-
-def cheatshuffle(l):
-    tmp1 = nfroml(TRIALS,l)
-    positives1 = nback(N,tmp1)
-    for i in range(0,ITERATIONS):
-        tmp2 = nfroml(TRIALS,l)
-        positives2 = nback(N,tmp2)
-        if positives1 < positives2:
-            #print positives1, "<", positives2
-            tmp1 = tmp2
-            positives1 = positives2
-    return tmp1
+def myrandom(l):
+    result = []
+    for i in range(0,N):
+        result.append(l[randint(0,len(l)-1)])
+    for i in range(0,MINTRIALS):
+        if randint(0,1):
+            result.append(result[-N])
+        else:
+            # be strict about probabilities
+            myl = l[:]
+            myl.pop(result[-N])
+            result.append(myl[randint(0,len(myl)-1)])
+    return result
 
 def gentrials():
     trials = []
-    iis = cheatshuffle(range(0,len(IFS)-1))
-    sis = cheatshuffle(range(0,len(SFS)-1))
-    for i,j,k in zip(iis,sis,range(0,len(iis)-1)):
+    iis = myrandom(range(0,len(IFS)-1))
+    sis = myrandom(range(0,len(SFS)-1))
+    for i,j,k in zip(iis,sis,range(0,len(iis))):
         if k < N:
             trials.append(Trial(IFS[i],SFS[j],False,False))
         else:
@@ -138,28 +126,21 @@ def gentrials():
             trials.append(Trial(IFS[i],SFS[j],iis[k]==iis[nb],sis[k]==sis[nb]))
     return trials
 
-def qcont(string):
-    event.clear()
-    mf = font.Font(font.get_default_font(),FONTSIZE)
-    foo = display.get_surface()
-    foo.fill((0,0,0))
-    foo.blit(mf.render(string,True,(0,255,0),(0,0,0)),TOPLEFT)
-    display.flip()
-    es = []
-    while not es:
-        for e in event.get(KEYDOWN):
-            es += [e.dict['unicode']]
-    if SPACE in es:
-        return True
-    else:
-        return False
-    
-    
-
 def main():
     selftests()
     global N
     while 1:
+        print "(Hint: while training, you can hit SPACE to abort)"
+        print "Hit '"+KEYLEFT+"' if the",str(N)+". previous image is identical to the one shown"
+        print "Hit '"+KEYRIGHT+"' if the",str(N)+". previous sound is identical to the one heard"
+        while 1:
+            print "Ready to train with N=%i?" %(N),
+            spam = raw_input(" [Yes/No]? ")
+            if re.match("y(es)?", spam, re.I):
+                break
+            elif re.match("n(o)?", spam, re.I):
+                print "bye ._."
+                sys.exit(1)
         display.init()
         display.set_mode(RESOLUTION, FULLSCREEN)
         font.init()
@@ -168,8 +149,8 @@ def main():
         mouse.set_visible(False)
         trials = gentrials()
         for trial in trials:
-            trial.runtrial()
-            print trial.result
+            if not trial.runtrial():
+                break
         display.quit()
         vis = 0.0
         acu = 0.0
@@ -178,14 +159,13 @@ def main():
                 vis+=1
             if trial.result[1]:
                 acu+=1
-        vp = (vis/TRIALS)*100
-        ap = (acu/TRIALS)*100
-        message = """percentage in visual modality:%i\n
-        percentage in acoustic modality:%i\n""" %(int(vp),int(ap))
+        vp = (vis/(MINTRIALS+N))*100
+        ap = (acu/(MINTRIALS+N))*100
+        message = "percentage in visual modality:%i\npercentage in acoustic modality:%i\n" %(int(vp),int(ap))
         print message
         if vp >= UPPERTH and ap >= UPPERTH:
             N+=1
-        elif vp < LOWERTH or ap < LOWERTH and N > 1:
+        elif (vp < LOWERTH or ap < LOWERTH) and N > 1:
             N-=1
 
 if __name__ == "__main__":
