@@ -31,13 +31,21 @@ FONTSIZE = 20
 KEYLEFT = "a"
 KEYRIGHT = "o"
 SPACE = " "
+IFDIR = "data/images"
+SFDIR = "data/sounds"
 IFS = ['1.png','2.png','3.png','4.png','5.png','6.png','7.png','8.png']
 SFS = ['1.ogg','2.ogg','3.ogg','4.ogg','5.ogg','6.ogg','7.ogg','8.ogg']
-BASE = 'base.png'
+BASE = IFDIR+"/"+'base.png'
 
 ### END CONFIGURATION SECTION ###
 
 TOPLEFT =((RESOLUTION[0]-SIZE[0])/2,(RESOLUTION[1]-SIZE[1])/2)
+
+for i in range(0,len(IFS)):
+    IFS[i]=IFDIR+"/"+IFS[i]
+    SFS[i]=SFDIR+"/"+SFS[i]
+
+
 
 import time, sys, re
 from random import randint
@@ -46,7 +54,9 @@ from pygame import FULLSCREEN, KEYDOWN
 from pygame.transform import scale
 
 def selftests():
+    print "Running some selftests"
     die = None
+    # do some preloading to minimize lag blow
     for f in IFS+SFS+[BASE]:
         try:
             open(f,"rb")
@@ -59,6 +69,8 @@ def selftests():
     if not len(IFS) == len(SFS):
         print >> sys.stderr, "FATAL: amount of stimuli for different modalities do not match!"
         sys.exit(1)
+    print "All data present, great!"
+    print
 
 class Trial:
     def __init__(self,imagefile,soundfile,trgtimg,trgtsnd):
@@ -126,7 +138,23 @@ def gentrials():
             trials.append(Trial(IFS[i],SFS[j],iis[k]==iis[nb],sis[k]==sis[nb]))
     return trials
 
+
+def ask():
+    spam = raw_input(" [Yes/No]? ")
+    if re.match("y(es)?", spam, re.I):
+        return True
+    elif re.match("n(o)?", spam, re.I):
+        return False
+
 def main():
+    print "#"*31
+    print "### Welcome to TrainBwister ###"
+    print "####### Version 0.1beta #######"
+    print """Have a look at the sourcecode!
+Change stuff to suit your needs!
+The program will hopefully be
+self explaining. Hafe fun!"""
+    print "#"*31
     selftests()
     global N
     while 1:
@@ -135,12 +163,20 @@ def main():
         print "Hit '"+KEYRIGHT+"' if the",str(N)+". previous sound is identical to the one heard"
         while 1:
             print "Ready to train with N=%i?" %(N),
-            spam = raw_input(" [Yes/No]? ")
-            if re.match("y(es)?", spam, re.I):
+            if ask():
                 break
-            elif re.match("n(o)?", spam, re.I):
-                print "bye ._."
-                sys.exit(1)
+            else:
+                print "Do you wish to train with N set to a different value? Choosing 'No' exits the program.",
+                if ask():
+                    n = int(raw_input("Ok, enter the desired value here: "))
+                    while n < 1:
+                        print "N must be 1 or higher!"
+                        n = int(raw_input("Enter a value higher than 1: "))
+                    N = n
+                else:
+                    print "bye"
+                    sys.exit(1)
+                
         display.init()
         display.set_mode(RESOLUTION, FULLSCREEN)
         font.init()
