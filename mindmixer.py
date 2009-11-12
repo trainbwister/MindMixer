@@ -148,7 +148,7 @@ def ask():
 
 def main():
     print "#"*31
-    print "### Welcome to TrainBwister ###"
+    print "### Welcome to MindMixer ###"
     print "####### Version 0.1beta #######"
     print """Have a look at the sourcecode!
 Change stuff to suit your needs!
